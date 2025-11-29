@@ -5,9 +5,9 @@
   "devDependencies": {
     "esbuild": "0.27.0"
   },
-    "scripts": {
-	"build": "./node_modules/.bin/esbuild src/* --define:DEV=false  --bundle --outdir=./static/ --loader:.html=copy",
-	"dev": "./node_modules/.bin/esbuild src/* --define:DEV=true --bundle --watch --outdir=./static/ --servedir=./static --loader:.html=copy",
-	"format": "prettier --write \"src/**/*.{ts,js,json,css,html}\""
-    }
+  "scripts": {
+    "build": "./node_modules/.bin/esbuild src/* --define:DEV=false  --bundle --outdir=./static/ --loader:.html=copy",
+    "dev": "./node_modules/.bin/esbuild src/* --define:DEV=true --bundle --watch --outdir=./static/ --servedir=./static --loader:.html=copy",
+    "format": "prettier --write \"src/**/*.{ts,js,json,css,html}\""
+  }
 }

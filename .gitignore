@@ -1,6 +1,5 @@
 dependency-reduced-pom.xml
 node_modules
-package-lock.json
 index/data
 target
 dist
