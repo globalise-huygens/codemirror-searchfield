@@ -1,0 +1,34 @@
+[
+  {
+    "id": "C001",
+    "type": "concept",
+    "labels": {
+      "en": {
+        "preferred": "Bicycle",
+        "alternative": ["Bike", "Cycle"],
+        "hidden": ["Pushbike"]
+      },
+      "nl": {
+        "preferred": "Fiets",
+        "alternative": ["Tweewieler"],
+        "hidden": ["Stadsfiets"]
+      }
+    }
+  },
+  {
+    "id": "C002",
+    "type": "concept",
+    "labels": {
+      "en": {
+        "preferred": "Library",
+        "alternative": ["Public Library"],
+        "hidden": ["Book hall"]
+      },
+      "nl": {
+        "preferred": "Bibliotheek",
+        "alternative": ["Openbare bibliotheek"],
+        "hidden": ["Boekenhal"]
+      }
+    }
+  }
+]

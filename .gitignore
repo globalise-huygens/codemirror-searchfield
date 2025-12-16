@@ -6,6 +6,4 @@ dist
 build
 .DS_Store
 *~
-
-data/places/
-data/polities/
+.idea
