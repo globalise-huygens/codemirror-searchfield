@@ -1,5 +1,6 @@
-import {EditorView, keymap} from "@codemirror/view";
-import {insertNewline} from "@codemirror/commands";
+import {standardKeymap} from "@codemirror/commands";
+import {StateEffect, StateField, RangeSetBuilder} from "@codemirror/state";
+import {Decoration, WidgetType, EditorView, keymap} from "@codemirror/view";
 import {autocompletion, CompletionContext, CompletionResult} from "@codemirror/autocomplete";
 
 interface Entity {
@@ -8,6 +9,76 @@ interface Entity {
     _label: string;
     alternative_labels: string[];
 }
+
+interface EntityState {
+    from: number;
+    to: number;
+    entity: Entity;
+}
+
+const insertEntity = StateEffect.define<EntityState>();
+
+class EntityWidget extends WidgetType {
+    constructor(private entity: Entity) {
+        super();
+    }
+
+    eq(other: WidgetType) {
+        return other instanceof EntityWidget && this.entity.id === other.entity.id;
+    }
+
+    toDOM() {
+        const el = document.createElement("span");
+        el.textContent = this.entity._label;
+        el.style.cssText = `
+            border-radius: 4px;
+            padding: 2px 4px;
+            background: #eef;`;
+        return el;
+    }
+}
+
+function buildEntityRanges(ents: readonly EntityState[]) {
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const e of ents) {
+        builder.add(e.from, e.to, Decoration.replace({
+            widget: new EntityWidget(e.entity),
+            inclusive: true
+        }));
+    }
+    return builder.finish();
+}
+
+const entityField = StateField.define<readonly EntityState[]>({
+    create() {
+        return [];
+    },
+
+    update(entityStates, tr) {
+        if (tr.docChanged) {
+            entityStates = entityStates.map(e => ({
+                ...e,
+                from: tr.changes.mapPos(e.from),
+                to: tr.changes.mapPos(e.to)
+            })).filter(e => e.from < e.to);
+        }
+
+        for (const effect of tr.effects) {
+            if (effect.is(insertEntity)) {
+                entityStates = [...entityStates, effect.value];
+            }
+        }
+
+        return entityStates;
+    },
+
+    provide(field) {
+        return [
+            EditorView.atomicRanges.of(view => buildEntityRanges(view.state.field(field))),
+            EditorView.decorations.of(view => buildEntityRanges(view.state.field(field)))
+        ];
+    },
+});
 
 export default function createSearchField(doc: string, parent: Element, onSearch: (query: string) => void, entities?: Entity[]) {
     function entityCompletionSource(context: CompletionContext): CompletionResult | null {
@@ -28,7 +99,17 @@ export default function createSearchField(doc: string, parent: Element, onSearch
             }).map(entity => ({
                 type: "property",
                 label: entity._label,
-                info: entity.alternative_labels.join(", ")
+                info: entity.alternative_labels.join(", "),
+                apply(view, completion, from, to) {
+                    view.dispatch({
+                        changes: {from, to, insert: completion.label},
+                        effects: insertEntity.of({
+                            from,
+                            to: from + completion.label.length,
+                            entity
+                        })
+                    });
+                },
             })),
         };
     }
@@ -57,14 +138,12 @@ export default function createSearchField(doc: string, parent: Element, onSearch
                         return true;
                     }
                 },
-                {
-                    key: "Mod-Enter",
-                    run: insertNewline
-                }
+                ...standardKeymap
             ]),
             autocompletion({
                 override: [entityCompletionSource]
             }),
+            entityField
         ]
     });
 }
