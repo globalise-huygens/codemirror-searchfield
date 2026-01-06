@@ -5,9 +5,8 @@ import {autocompletion, CompletionContext, CompletionResult} from "@codemirror/a
 interface Entity {
     id: string;
     type: string;
-    preferred: string;
-    alternative: string[];
-    hidden: string[];
+    _label: string;
+    alternative_labels: string[];
 }
 
 export default function createSearchField(doc: string, parent: Element, onSearch: (query: string) => void, entities?: Entity[]) {
@@ -22,15 +21,14 @@ export default function createSearchField(doc: string, parent: Element, onSearch
             filter: false,
             from: word.from,
             options: entities.filter(entity => {
-                const preferredMatch = entity.preferred.toLowerCase().indexOf(search) > -1;
-                const alternativeMatch = entity.alternative.find(alternative => alternative.toLowerCase().indexOf(search) > -1);
-                const hiddenMatch = entity.hidden.find(hidden => hidden.toLowerCase().indexOf(search) > -1);
+                const labelMatch = entity._label.toLowerCase().indexOf(search) > -1;
+                const altMatch = entity.alternative_labels.find(alt => alt.toLowerCase().indexOf(search) > -1);
 
-                return preferredMatch || alternativeMatch || hiddenMatch;
+                return labelMatch || altMatch;
             }).map(entity => ({
                 type: "property",
-                label: entity.preferred,
-                info: [...entity.alternative, ...entity.hidden].join(", ")
+                label: entity._label,
+                info: entity.alternative_labels.join(", ")
             })),
         };
     }
