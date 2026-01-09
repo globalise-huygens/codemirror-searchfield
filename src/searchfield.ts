@@ -1,25 +1,28 @@
 import {standardKeymap} from "@codemirror/commands";
-import {StateEffect, StateField, RangeSetBuilder} from "@codemirror/state";
-import {Decoration, WidgetType, EditorView, keymap} from "@codemirror/view";
+import {
+    Decoration,
+    WidgetType,
+    EditorView,
+    MatchDecorator,
+    ViewPlugin,
+    DecorationSet,
+    ViewUpdate,
+    keymap
+} from "@codemirror/view";
 import {autocompletion, CompletionContext, CompletionResult} from "@codemirror/autocomplete";
 
-interface Entity {
+interface MinimalEntity {
     id: string;
     type: string;
-    _label: string;
-    alternative_labels: string[];
+    label: string;
 }
 
-interface EntityState {
-    from: number;
-    to: number;
-    entity: Entity;
+interface Entity extends MinimalEntity {
+    alternatives: string[];
 }
-
-const insertEntity = StateEffect.define<EntityState>();
 
 class EntityWidget extends WidgetType {
-    constructor(private entity: Entity) {
+    constructor(private entity: MinimalEntity) {
         super();
     }
 
@@ -29,7 +32,7 @@ class EntityWidget extends WidgetType {
 
     toDOM() {
         const el = document.createElement("span");
-        el.textContent = this.entity._label;
+        el.textContent = this.entity.label;
         el.style.cssText = `
             border-radius: 4px;
             padding: 2px 4px;
@@ -38,46 +41,27 @@ class EntityWidget extends WidgetType {
     }
 }
 
-function buildEntityRanges(ents: readonly EntityState[]) {
-    const builder = new RangeSetBuilder<Decoration>();
-    for (const e of ents) {
-        builder.add(e.from, e.to, Decoration.replace({
-            widget: new EntityWidget(e.entity),
-            inclusive: true
-        }));
+const entityMatcher = new MatchDecorator({
+    regexp: /({"id":.*?,"type":.*?,"label":.*?})/g,
+    decoration: match => Decoration.replace({
+        widget: new EntityWidget(JSON.parse(match[1]))
+    }),
+});
+
+const placeholders = ViewPlugin.fromClass(class {
+    placeholders: DecorationSet;
+
+    constructor(view: EditorView) {
+        this.placeholders = entityMatcher.createDeco(view);
     }
-    return builder.finish();
-}
 
-const entityField = StateField.define<readonly EntityState[]>({
-    create() {
-        return [];
-    },
-
-    update(entityStates, tr) {
-        if (tr.docChanged) {
-            entityStates = entityStates.map(e => ({
-                ...e,
-                from: tr.changes.mapPos(e.from),
-                to: tr.changes.mapPos(e.to)
-            })).filter(e => e.from < e.to);
-        }
-
-        for (const effect of tr.effects) {
-            if (effect.is(insertEntity)) {
-                entityStates = [...entityStates, effect.value];
-            }
-        }
-
-        return entityStates;
-    },
-
-    provide(field) {
-        return [
-            EditorView.atomicRanges.of(view => buildEntityRanges(view.state.field(field))),
-            EditorView.decorations.of(view => buildEntityRanges(view.state.field(field)))
-        ];
-    },
+    update(update: ViewUpdate) {
+        this.placeholders = entityMatcher.updateDeco(update, this.placeholders);
+    }
+}, {
+    decorations: instance => instance.placeholders,
+    provide: plugin => EditorView.atomicRanges.of(view =>
+        view.plugin(plugin)?.placeholders || Decoration.none),
 });
 
 export default function createSearchField(doc: string, parent: Element, onSearch: (query: string) => void, entities?: Entity[]) {
@@ -92,24 +76,15 @@ export default function createSearchField(doc: string, parent: Element, onSearch
             filter: false,
             from: word.from,
             options: entities.filter(entity => {
-                const labelMatch = entity._label.toLowerCase().indexOf(search) > -1;
-                const altMatch = entity.alternative_labels.find(alt => alt.toLowerCase().indexOf(search) > -1);
+                const labelMatch = entity.label.toLowerCase().indexOf(search) > -1;
+                const altMatch = entity.alternatives.find(alt => alt.toLowerCase().indexOf(search) > -1);
 
                 return labelMatch || altMatch;
             }).map(entity => ({
                 type: "property",
-                label: entity._label,
-                info: entity.alternative_labels.join(", "),
-                apply(view, completion, from, to) {
-                    view.dispatch({
-                        changes: {from, to, insert: completion.label},
-                        effects: insertEntity.of({
-                            from,
-                            to: from + completion.label.length,
-                            entity
-                        })
-                    });
-                },
+                label: entity.label,
+                info: entity.alternatives.join(", "),
+                apply: JSON.stringify({id: entity.id, type: entity.type, label: entity.label}),
             })),
         };
     }
@@ -143,7 +118,7 @@ export default function createSearchField(doc: string, parent: Element, onSearch
             autocompletion({
                 override: [entityCompletionSource]
             }),
-            entityField
+            placeholders
         ]
     });
 }
