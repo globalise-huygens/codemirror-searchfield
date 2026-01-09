@@ -9,7 +9,17 @@ import {
     ViewUpdate,
     keymap
 } from "@codemirror/view";
-import {autocompletion, CompletionContext, CompletionResult} from "@codemirror/autocomplete";
+import {autocompletion, Completion, CompletionContext, CompletionResult} from "@codemirror/autocomplete";
+import crossIconText from "./cross.svg";
+
+const parser = new DOMParser();
+const crossIconDoc = parser.parseFromString(crossIconText, "image/svg+xml");
+const crossIcon = crossIconDoc.documentElement as unknown as SVGElement;
+
+interface EntityTypeRef {
+    color: string;
+    icon: SVGElement;
+}
 
 interface MinimalEntity {
     id: string;
@@ -21,50 +31,68 @@ interface Entity extends MinimalEntity {
     alternatives: string[];
 }
 
-class EntityWidget extends WidgetType {
-    constructor(private entity: MinimalEntity) {
-        super();
+export default function createSearchField(doc: string, parent: Element, onSearch: (query: string) => void, types: Record<string, EntityTypeRef>, entities?: Entity[]) {
+    class EntityWidget extends WidgetType {
+        private typeRef: EntityTypeRef;
+
+        constructor(private entity: MinimalEntity) {
+            super();
+            this.typeRef = types[entity.type];
+        }
+
+        eq(other: WidgetType) {
+            return other instanceof EntityWidget && this.entity.id === other.entity.id;
+        }
+
+        toDOM(view: EditorView) {
+            const el = document.createElement("span");
+            el.classList = "cm-entity";
+            el.style.setProperty("--cm-entity-color", this.typeRef.color);
+
+            const icon = this.typeRef.icon.cloneNode(true) as SVGElement;
+            icon.classList = "cm-entity-icon";
+
+            const cross = crossIcon.cloneNode(true) as SVGElement;
+            cross.classList = "cm-entity-cross";
+            cross.addEventListener("click", e => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const pos = view.posAtDOM(el);
+                if (pos != null) {
+                    view.plugin(entitiesPlugin)?.entities.between(pos, pos, (from, to) =>
+                        view.dispatch({changes: {from, to, insert: ""}}));
+                }
+            });
+
+            el.append(icon, document.createTextNode(this.entity.label), cross);
+            return el;
+        }
     }
 
-    eq(other: WidgetType) {
-        return other instanceof EntityWidget && this.entity.id === other.entity.id;
-    }
+    const entityMatcher = new MatchDecorator({
+        regexp: /({"id":.*?,"type":.*?,"label":.*?})/g,
+        decoration: match => Decoration.replace({
+            widget: new EntityWidget(JSON.parse(match[1]))
+        }),
+    });
 
-    toDOM() {
-        const el = document.createElement("span");
-        el.textContent = this.entity.label;
-        el.style.cssText = `
-            border-radius: 4px;
-            padding: 2px 4px;
-            background: #eef;`;
-        return el;
-    }
-}
+    const entitiesPlugin = ViewPlugin.fromClass(class {
+        entities: DecorationSet;
 
-const entityMatcher = new MatchDecorator({
-    regexp: /({"id":.*?,"type":.*?,"label":.*?})/g,
-    decoration: match => Decoration.replace({
-        widget: new EntityWidget(JSON.parse(match[1]))
-    }),
-});
+        constructor(view: EditorView) {
+            this.entities = entityMatcher.createDeco(view);
+        }
 
-const placeholders = ViewPlugin.fromClass(class {
-    placeholders: DecorationSet;
+        update(update: ViewUpdate) {
+            this.entities = entityMatcher.updateDeco(update, this.entities);
+        }
+    }, {
+        decorations: instance => instance.entities,
+        provide: plugin => EditorView.atomicRanges.of(view =>
+            view.plugin(plugin)?.entities || Decoration.none),
+    });
 
-    constructor(view: EditorView) {
-        this.placeholders = entityMatcher.createDeco(view);
-    }
-
-    update(update: ViewUpdate) {
-        this.placeholders = entityMatcher.updateDeco(update, this.placeholders);
-    }
-}, {
-    decorations: instance => instance.placeholders,
-    provide: plugin => EditorView.atomicRanges.of(view =>
-        view.plugin(plugin)?.placeholders || Decoration.none),
-});
-
-export default function createSearchField(doc: string, parent: Element, onSearch: (query: string) => void, entities?: Entity[]) {
     function entityCompletionSource(context: CompletionContext): CompletionResult | null {
         const word = context.matchBefore(/\w*/);
         if (!entities || !word || (word.from === word.to && !context.explicit))
@@ -82,11 +110,23 @@ export default function createSearchField(doc: string, parent: Element, onSearch
                 return labelMatch || altMatch;
             }).map(entity => ({
                 type: "property",
+                entity: entity,
                 label: entity.label,
-                info: entity.alternatives.join(", "),
+                detail: entity.alternatives.join(", "),
                 apply: JSON.stringify({id: entity.id, type: entity.type, label: entity.label}),
             })),
         };
+    }
+
+    function renderCompletionOptionIcon(completion: Completion) {
+        if ('entity' in completion) {
+            const typeRef = types[(completion.entity as MinimalEntity).type];
+            const icon = typeRef.icon.cloneNode(true) as SVGElement;
+            icon.classList = "cm-entity-icon";
+            return icon;
+        }
+
+        return null;
     }
 
     return new EditorView({
@@ -104,6 +144,36 @@ export default function createSearchField(doc: string, parent: Element, onSearch
                 "&.cm-focused": {
                     outline: "none",
                 },
+                ".cm-entity": {
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "0.2em",
+                    borderRadius: "0.2em",
+                    fontSize: "0.9em",
+                    backgroundColor: "var(--cm-entity-color)",
+                    color: "color-mix(in srgb, var(--cm-entity-color) 10%, black 90%);",
+                },
+                ".cm-entity-icon": {
+                    marginRight: "0.2em",
+                    width: "1em",
+                    height: "1em",
+                },
+                ".cm-entity-cross": {
+                    marginLeft: "0.2em",
+                    width: "1em",
+                    height: "1em",
+                    cursor: "pointer",
+                },
+                ".cm-tooltip.cm-tooltip-autocomplete": {
+                    "& > ul": {
+                        fontFamily: "sans-serif",
+                    }
+                },
+                ".cm-completionDetail": {
+                    display: "block",
+                    fontSize: "0.9em",
+                    margin: "0",
+                },
             }),
             keymap.of([
                 {
@@ -116,9 +186,14 @@ export default function createSearchField(doc: string, parent: Element, onSearch
                 ...standardKeymap
             ]),
             autocompletion({
-                override: [entityCompletionSource]
+                icons: false,
+                override: [entityCompletionSource],
+                addToOptions: [{
+                    render: renderCompletionOptionIcon,
+                    position: 5
+                }],
             }),
-            placeholders
+            entitiesPlugin
         ]
     });
 }
