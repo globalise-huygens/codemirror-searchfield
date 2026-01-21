@@ -15,7 +15,7 @@ const types = {
     'Polity': {color: '#BDE8F5', icon: getSVGElement(polityIcon)},
 };
 
-const data = [...places.map(place => ({
+const entities = [...places.map(place => ({
     id: place.id,
     type: place.type,
     label: place._label,
@@ -27,12 +27,34 @@ const data = [...places.map(place => ({
     alternatives: polity.alternative_labels
 }))].sort((a, b) => a.label.localeCompare(b.label));
 
-const onSearch = (query: string) => console.log("Search query:", query);
-const searchField = createSearchField("", document.getElementsByClassName("searchbox-input")[0], onSearch, types, data);
+const input = document.getElementsByClassName("searchbox-input")[0];
+const undoButton = document.getElementsByClassName("searchbox-undo-button")[0];
+const redoButton = document.getElementsByClassName("searchbox-redo-button")[0];
+const searchButton = document.getElementsByClassName("searchbox-search-button")[0];
 
-document
-    .getElementsByClassName("searchbox-button")[0]
-    .addEventListener("click", () => onSearch(searchField.state.doc.toString()));
+function onSearch(query: string) {
+    console.log("Search query:", query);
+}
+
+function onUpdate(canUndo: boolean, canRedo: boolean) {
+    console.log("On update:", canUndo, canRedo);
+
+    canUndo ? undoButton.removeAttribute("disabled") : undoButton.setAttribute("disabled", "disabled");
+    canRedo ? redoButton.removeAttribute("disabled") : redoButton.setAttribute("disabled", "disabled");
+}
+
+const {search, undo, redo} = createSearchField({
+    doc: "",
+    parent: input,
+    onSearch,
+    onUpdate,
+    types,
+    entities
+});
+
+undoButton.addEventListener("click", undo);
+redoButton.addEventListener("click", redo);
+searchButton.addEventListener("click", search);
 
 // @ts-ignore
 if (DEV) {

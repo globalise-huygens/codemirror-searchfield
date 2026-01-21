@@ -1,4 +1,4 @@
-import {standardKeymap} from "@codemirror/commands";
+import {history, undo, redo, undoDepth, redoDepth, standardKeymap, historyKeymap} from "@codemirror/commands";
 import {
     Decoration,
     WidgetType,
@@ -31,7 +31,29 @@ interface Entity extends MinimalEntity {
     alternatives: string[];
 }
 
-export default function createSearchField(doc: string, parent: Element, onSearch: (query: string) => void, types: Record<string, EntityTypeRef>, entities?: Entity[]) {
+export interface SearchFieldConfig {
+    doc: string;
+    parent: Element;
+    onSearch: (query: string) => void;
+    onUpdate: (canUndo: boolean, canRedo: boolean) => void;
+    types: Record<string, EntityTypeRef>;
+    entities?: Entity[];
+}
+
+export interface SearchFieldActions {
+    search: () => void;
+    undo: () => void;
+    redo: () => void;
+}
+
+export default function createSearchField({
+                                              doc,
+                                              parent,
+                                              onSearch,
+                                              onUpdate,
+                                              types,
+                                              entities
+                                          }: SearchFieldConfig): SearchFieldActions {
     class EntityWidget extends WidgetType {
         private typeRef: EntityTypeRef;
 
@@ -129,7 +151,18 @@ export default function createSearchField(doc: string, parent: Element, onSearch
         return null;
     }
 
-    return new EditorView({
+    const updateListener = EditorView.updateListener.of(update => {
+        if (!update.docChanged && !update.transactions.some(tr => tr.effects.length)) {
+            return;
+        }
+
+        const canUndo = undoDepth(update.state) > 0;
+        const canRedo = redoDepth(update.state) > 0;
+
+        onUpdate(canUndo, canRedo);
+    });
+
+    const view = new EditorView({
         doc, parent,
         extensions: [
             EditorView.lineWrapping,
@@ -183,8 +216,10 @@ export default function createSearchField(doc: string, parent: Element, onSearch
                         return true;
                     }
                 },
-                ...standardKeymap
+                ...standardKeymap,
+                ...historyKeymap
             ]),
+            history(),
             autocompletion({
                 icons: false,
                 override: [entityCompletionSource],
@@ -193,7 +228,14 @@ export default function createSearchField(doc: string, parent: Element, onSearch
                     position: 5
                 }],
             }),
-            entitiesPlugin
+            entitiesPlugin,
+            updateListener
         ]
     });
+
+    return {
+        search: () => onSearch(view.state.doc.toString()),
+        undo: () => undo(view),
+        redo: () => redo(view),
+    };
 }
