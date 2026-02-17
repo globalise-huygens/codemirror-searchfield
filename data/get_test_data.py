@@ -18,6 +18,7 @@ def get_places(folder_path):
 
                 preferred_label = ""
                 alternative_labels = []
+                geometry = None
 
                 if data["is_appellative_subject_of"] is None:
                     continue
@@ -43,12 +44,25 @@ def get_places(folder_path):
                     elif label_type == "http://vocab.getty.edu/aat/300404670":
                         preferred_label = label_value
 
+                geometry_approximated_by = data.get("geometry_approximated_by")
+                if geometry_approximated_by:
+                    geometry_defined_by = geometry_approximated_by.get(
+                        "geometry_defined_by"
+                    )
+                    if geometry_defined_by:
+                        as_wkt = geometry_defined_by.get("geo:asWkt")
+                        if isinstance(as_wkt, dict):
+                            geometry = as_wkt.get("@value")
+                        else:
+                            geometry = as_wkt
+
                 places.append(
                     {
                         "id": data.get("id"),
                         "type": data.get("type"),
                         "_label": preferred_label,
                         "alternative_labels": alternative_labels,
+                        "geometry": geometry,
                     }
                 )
 
