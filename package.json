@@ -1,13 +1,16 @@
 {
   "dependencies": {
+    "@lezer/lr": "^1.4.10",
     "codemirror": "^6.0.2"
   },
   "devDependencies": {
-    "esbuild": "0.27.0"
+    "@lezer/generator": "^1.8.0",
+    "esbuild": "0.28.0"
   },
   "scripts": {
-    "build": "./node_modules/.bin/esbuild src/* --define:DEV=false  --bundle --outdir=./static/ --loader:.html=copy --loader:.svg=text",
-    "dev": "./node_modules/.bin/esbuild src/* --define:DEV=true --bundle --watch --outdir=./static/ --servedir=./static --loader:.html=copy --loader:.svg=text",
-    "format": "prettier --write \"src/**/*.{ts,js,json,css,html}\""
+    "build": "./node_modules/.bin/esbuild src/* --define:DEV=false  --bundle --outdir=./static/ --loader:.html=copy --loader:.grammar=copy --loader:.svg=text",
+    "dev": "./node_modules/.bin/esbuild src/* --define:DEV=true --bundle --watch --outdir=./static/ --servedir=./static --loader:.html=copy --loader:.grammar=copy --loader:.svg=text",
+    "format": "prettier --write \"src/**/*.{ts,js,json,css,html}\"",
+    "prepare": "lezer-generator src/lucene.grammar --typeScript -o src/parser.ts"
   }
 }

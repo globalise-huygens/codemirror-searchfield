@@ -10,10 +10,20 @@ import {
     keymap
 } from "@codemirror/view";
 import {autocompletion, Completion, CompletionContext, CompletionResult} from "@codemirror/autocomplete";
+import {styleTags, tags as t} from "@lezer/highlight";
+import {
+    LRLanguage,
+    LanguageSupport,
+    defaultHighlightStyle,
+    syntaxTree,
+    syntaxHighlighting,
+    bracketMatching
+} from "@codemirror/language";
+import {parser} from "./parser.ts";
 import crossIconText from "./cross.svg";
 
-const parser = new DOMParser();
-const crossIconDoc = parser.parseFromString(crossIconText, "image/svg+xml");
+const domParser = new DOMParser();
+const crossIconDoc = domParser.parseFromString(crossIconText, "image/svg+xml");
 const crossIcon = crossIconDoc.documentElement as unknown as SVGElement;
 
 interface EntityTypeRef {
@@ -45,6 +55,38 @@ export interface SearchFieldActions {
     undo: () => void;
     redo: () => void;
 }
+
+const luceneParser = parser.configure({
+    props: [
+        styleTags({
+            Term: t.string,
+            Phrase: t.string,
+
+            And: t.operatorKeyword,
+            Or: t.operatorKeyword,
+            Not: t.operatorKeyword,
+
+            Integer: t.number,
+            Float: t.number,
+
+            'Proximity/"~"': t.modifier,
+            'Fuzzy/"~"': t.modifier,
+            'Boost/"^"': t.modifier,
+            'PrefixWildcardTerm/"*"': t.modifier,
+
+            Regex: t.regexp,
+            Escape: t.escape,
+            "( )": t.paren,
+        }),
+    ]
+});
+
+const luceneLanguage = LRLanguage.define({
+    parser: luceneParser,
+    languageData: {
+        name: "lucene"
+    },
+});
 
 export default function createSearchField({
                                               doc,
@@ -160,6 +202,8 @@ export default function createSearchField({
         const canRedo = redoDepth(update.state) > 0;
 
         onUpdate(canUndo, canRedo);
+
+        console.log(syntaxTree(view.state).toString());
     });
 
     const view = new EditorView({
@@ -220,6 +264,8 @@ export default function createSearchField({
                 ...historyKeymap
             ]),
             history(),
+            syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+            bracketMatching(),
             autocompletion({
                 icons: false,
                 override: [entityCompletionSource],
@@ -229,7 +275,8 @@ export default function createSearchField({
                 }],
             }),
             entitiesPlugin,
-            updateListener
+            updateListener,
+            new LanguageSupport(luceneLanguage),
         ]
     });
 
